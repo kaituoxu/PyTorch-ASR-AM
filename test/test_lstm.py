@@ -14,19 +14,25 @@ from lstm import LSTMModel
 
 D, C, H, L, N, T = 2, 10, 4, 2, 5, 6
 
-input = Variable(torch.randn(T, N, D), requires_grad=False)
+input = Variable(torch.randn(T, N, D).cuda(), requires_grad=False)
 output = np.random.randint(0, C, (T, N))
-output = Variable(torch.from_numpy(output), requires_grad=False)
+output = Variable(torch.from_numpy(output).long().cuda(), requires_grad=False)
 
 print("="*20 + "input, output" + "="*20)
 print(input)
 print(output)
 
-model = LSTMModel(D, C, H, L, N)
+model = LSTMModel(D, C, H, L, N).cuda()
 loss_func = nn.CrossEntropyLoss()
 
+model.hidden = model.init_hidden()
+score = model(input, [1]*N)
+print("="*20 + "hidden before reset" + "="*20)
+print(model.hidden)
+print("="*20 + "hidden after reset" + "="*20)
+model.reset_hidden([1]*N)
+print(model.hidden)
 print("="*20 + "score" + "="*20)
-score = model(input)
 print(score)
 
 print("="*20 + "loss" + "="*20)

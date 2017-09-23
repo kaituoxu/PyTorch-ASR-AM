@@ -17,14 +17,18 @@ class LSTMModel(nn.Module):
         self.init_weights(init_range=0.1)
         self.hidden = self.init_hidden()
 
-    def forward(self, input):
+    def forward(self, input, reset_flags):
+        self.reset_hidden(reset_flags)
         out, self.hidden = self.lstm(input, self.hidden)
         score = self.fc(out.view(out.size(0) * out.size(1), out.size(2)))
         return score.view(out.size(0), out.size(1), score.size(1))
 
     def init_hidden(self):
-        h_0 = Variable(torch.zeros(self.nlayer, self.batch_size, self.nhidden))
-        c_0 = Variable(torch.zeros(self.nlayer, self.batch_size, self.nhidden))
+        # MUST call it outside of this file once, before call forward()
+        # below is useful, it set hidden on GPU or CPU with model
+        weight = next(self.parameters()).data
+        h_0 = Variable(weight.new(self.nlayer, self.batch_size, self.nhidden).zero_())
+        c_0 = Variable(weight.new(self.nlayer, self.batch_size, self.nhidden).zero_())
         return (h_0, c_0)
 
     def reset_hidden(self, reset_flags):
@@ -35,9 +39,10 @@ class LSTMModel(nn.Module):
         h = Variable(self.hidden[0].data)
         c = Variable(self.hidden[1].data)
         self.hidden = (h, c)
-        for b in range(reset_flags):
+        for b in range(len(reset_flags)):
             if reset_flags[b] == 1:
-                self.hidden[:, b, :].data.fill_(0)
+                self.hidden[0][:, b, :].data.fill_(0)
+                self.hidden[1][:, b, :].data.fill_(0)
 
     def init_weights(self, init_range=0.1):
         for p in self.parameters():
