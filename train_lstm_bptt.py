@@ -25,7 +25,7 @@ def train_one_epoch(feats_rspecifier, targets_rspecifier, batch_size, steps):
     x = 0
     while True:
         x += 1
-        feat_host, target_host, done = get_one_batch_data(feat_reader,
+        feat_host, target_host, new_utt_flags, done = get_one_batch_data(feat_reader,
                                                           target_reader,
                                                           feats_utt, 
                                                           targets_utt,

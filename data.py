@@ -42,9 +42,9 @@ def get_one_batch_data(feat_reader, target_reader, feats_utt, targets_utt,
     frame_num_utt = [0] * batch_size
 
     # slice at most 'batch_size' frames
-    for b in range(batch_size):
-        num_rows = feats_utt[b].shape[0]
-        frame_num_utt[b] = min(steps, num_rows)
+    # for b in range(batch_size):
+    #     num_rows = feats_utt[b].shape[0]
+    #     frame_num_utt[b] = min(steps, num_rows)
 
     # pack the features
     for b in range(batch_size):
@@ -59,13 +59,19 @@ def get_one_batch_data(feat_reader, target_reader, feats_utt, targets_utt,
 
     # remove the data we just packed
     for b in range(batch_size):
-        # feats
-        rows = feats_utt[b].shape[0]
-        if rows == frame_num_utt[b]:
+        packed_rows = frame_num_utt[b]
+        feats_utt[b] = feats_utt[b][packed_rows:]
+        targets_utt[b] = targets_utt[b][packed_rows:]
+        left_rows = feats_utt[b].shape[0]
+        if left_rows < steps:
             feats_utt[b] = np.array([])
-        else:
-            packed_rows = frame_num_utt[b]
-            feats_utt[b] = feats_utt[b][packed_rows:]
-            targets_utt[b] = targets_utt[b][packed_rows:]
+        # feats
+        # rows = feats_utt[b].shape[0]
+        # if rows == frame_num_utt[b]:
+        #     feats_utt[b] = np.array([])
+        # else:
+        #     packed_rows = frame_num_utt[b]
+        #     feats_utt[b] = feats_utt[b][packed_rows:]
+        #     targets_utt[b] = targets_utt[b][packed_rows:]
     #### END prepare mini-batch data ####
-    return feat_host, target_host, False
+    return feat_host, target_host, new_utt_flags, False
