@@ -31,10 +31,14 @@ parser.add_argument('--epochs', default=2, type=int, help='Number of training ep
 parser.add_argument('--cuda', dest='cuda', action='store_true', help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
+parser.add_argument('--max_norm', default=400, type=int, help='Norm cutoff to prevent explosion of gradients')
+parser.add_argument('--learning_anneal', default=1.1, type=float, help='Annealing applied to learning rate every epoch')
+parser.add_argument('--checkpoint', dest='checkpoint', action='store_true', help='Enables checkpoint saving of model')
 
 
 def train_one_epoch(feats_rspecifier, targets_rspecifier, model, criterion,
-                    optimizer, feat_dim, target_dim, batch_size, steps, args):
+                    optimizer, feat_dim, target_dim, batch_size, steps, epoch, 
+                    args):
     """
     Simulate Kaldi nnet-train-multistream.cc
     Args:
@@ -48,6 +52,7 @@ def train_one_epoch(feats_rspecifier, targets_rspecifier, model, criterion,
     targets_utt = [np.array([])] * batch_size
     new_utt_flags = [0] * batch_size
 
+    total_correct = 0
     total_loss = 0
     total_frame = 0
 
@@ -78,7 +83,8 @@ def train_one_epoch(feats_rspecifier, targets_rspecifier, model, criterion,
         # Forward
         scores = model(feats, new_utt_flags) # TxNxC
         # Loss
-        loss = criterion(scores.view(-1, target_dim), targets.view(-1))
+        scores = scores.view(-1, target_dim)
+        loss = criterion(scores, targets.view(-1))
         # Backward
         optimizer.zero_grad()
         loss.backward()
@@ -87,27 +93,33 @@ def train_one_epoch(feats_rspecifier, targets_rspecifier, model, criterion,
         optimizer.step()
 
         if args.cuda:
-            print("pass now")
+            pass
+            #print("pass now")
             # torch.cuda.synchronize() # multi-gpu
 
 
+        _, predict = torch.max(scores, 1)
+
+        total_correct += (predict == targets.view(-1)).sum().data[0]
         total_loss += loss.data[0]
         total_frame += batch_size * steps
 
-        if i % 100 == 0:
-            print('Epoch {0} | Iter {1} | Average Loss {loss:.3f}'.format(
-                epoch + 1, i, loss=total_loss / total_frame))
+        if i % 100 == 1:
+            print('Epoch {0} | Iter {1} | Average Loss {loss:.3f} | '
+                  'Frame Acc {acc:.3f}'.format(epoch + 1, i, loss=total_loss / i,
+                                            acc=total_correct / total_frame * 100.0))
         
-        print("loss", total_loss)
-        return
+        # print("loss", total_loss)
+        # return
 
         # Do I really need this?
         del loss
-        del out
+        del scores
         # Use feat_host and target_host
         # if DEBUG:
         #     print(feat_host)
         #     if i == 100: return
+    return total_loss / i, total_correct / total_frame * 100.0
 
 
 def main():
@@ -148,13 +160,26 @@ def main():
     # train model multi-epochs
     for epoch in range(start_epoch, args.epochs):
         model.train() # Turn on BatchNorm & Dropout
-        end = time.time()
-        train_one_epoch(feats_rspecifier=train_feats_rspecifier,
-                        targets_rspecifier=train_targets_rspecifier,
-                        model=model, criterion=criterion, optimizer=optimizer,
-                        feat_dim=feat_dim, target_dim=target_dim,
-                        batch_size=args.batch_size, steps=args.bptt_steps,
-                        args=args)
+        start = time.time()
+        avg_loss, avg_acc =  \
+            train_one_epoch(feats_rspecifier=train_feats_rspecifier,
+                            targets_rspecifier=train_targets_rspecifier,
+                            model=model, criterion=criterion, 
+                            optimizer=optimizer,
+                            feat_dim=feat_dim, target_dim=target_dim,
+                            batch_size=args.batch_size, steps=args.bptt_steps,
+                            epoch=epoch, args=args)
+        print('-'*80)
+        print('End of Epoch {0} | Time {:.2f}s | Train Loss {:.3f} | '
+              'Train Acc {:.3f} '.foramt(epoch, time.time() - start, avg_loss,
+                                         avg_acc))
+        print('-'*80)
+
+        if args.checkpoint:
+            file_path = '%s/am_%d.pth.tar' % (save_folder, epoch + 1)
+            # torch.save()
+        
+
 
 
 

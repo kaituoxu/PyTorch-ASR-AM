@@ -1,5 +1,5 @@
 import numpy as np
-DEBUG = 1
+DEBUG = 0
 
 def read_one_utt(feat_reader, target_reader):
     while not feat_reader.done():
@@ -34,7 +34,7 @@ def get_one_batch_data(feat_reader, target_reader, feats_utt, targets_utt,
     frames_to_go = 0
     for b in range(batch_size):
         frames_to_go += feats_utt[b].shape[0]
-    if frames_to_go == 0: return None, None, True
+    if frames_to_go == 0: return None, None, None, True
 
     #### START pack the mini-batch data ####
     feat_host = np.zeros((steps, batch_size, feat_dim))
