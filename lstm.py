@@ -50,3 +50,13 @@ class LSTMModel(nn.Module):
                 p.data.uniform_(-init_range, init_range)
             else:
                 p.data.fill_(0)
+
+    @staticmethod
+    def serialize(model, optimizer, epoch):
+        # model_is_cuda = next(model.parameters()).is_cuda
+        # model = model.module if model_is_cuda else model
+        package = {'state_dict': model.state_dict(),
+                   'optim_dict': optimizer.state_dict(),
+                   'epoch': epoch}
+        return package
+
