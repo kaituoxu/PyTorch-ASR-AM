@@ -3,4 +3,5 @@ data
 __pycache__
 *.so
 *.a
-models
+models*
+temp

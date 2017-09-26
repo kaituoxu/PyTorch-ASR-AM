@@ -37,7 +37,7 @@ parser.add_argument('--epochs', default=2, type=int, help='Number of training ep
 parser.add_argument('--cuda', dest='cuda', action='store_true', help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
-parser.add_argument('--max_norm', default=400, type=int, help='Norm cutoff to prevent explosion of gradients')
+parser.add_argument('--max_norm', default=250, type=int, help='Norm cutoff to prevent explosion of gradients')
 parser.add_argument('--learning_anneal', default=1.1, type=float, help='Annealing applied to learning rate every epoch')
 parser.add_argument('--checkpoint', dest='checkpoint', action='store_true', help='Enables checkpoint saving of model')
 parser.add_argument('--continue_from', default='', help='Continue from checkpoint model')
@@ -46,8 +46,8 @@ parser.add_argument('--model_path', default='final.pth.tar',
 
 
 def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
-                  cross_valid, model, criterion, batch_size, steps, epoch, 
-                  optimizer=None):
+                  cross_valid, model, criterion, batch_size, steps, epoch,
+                  max_norm, optimizer=None):
     """
     Simulate Kaldi nnet-train-multistream.cc
     Args:
@@ -57,7 +57,7 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
     feat_reader = kaldi_io.SequentialBaseFloatMatrixReader(feats_rspecifier)
     target_reader = kaldi_io.RandomAccessInt32VectorReader(targets_rspecifier)
 
-    feats_utt = [np.array([])] * batch_size # every element is numpy ndarray
+    feats_utt = [np.array([])] * batch_size  # every element is numpy ndarray
     targets_utt = [np.array([])] * batch_size
     new_utt_flags = [0] * batch_size
 
@@ -66,14 +66,15 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
     total_frame = 0
 
     i = 0
-    model.hidden = model.init_hidden() # for the sake of using GPU, must do this
+    model.hidden = model.init_hidden()  # to use GPU, must do this
     while True:
         i += 1
         feat_host, target_host, new_utt_flags, done = \
             get_one_batch_data(feat_reader, target_reader, feats_utt,
-                               targets_utt, new_utt_flags, feat_dim, batch_size,
-                               steps)
-        if done: break
+                               targets_utt, new_utt_flags, feat_dim, 
+                               batch_size, steps)
+        if done:
+            break
 
         feat_tensor = torch.FloatTensor(feat_host)
         target_tensor = torch.LongTensor(target_host.astype(np.int64))
@@ -85,7 +86,7 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
         targets = Variable(target_tensor, requires_grad=False)
 
         # Forward
-        scores = model(feats, new_utt_flags) # TxNxC
+        scores = model(feats, new_utt_flags)  # TxNxC
         # Loss
         scores = scores.view(-1, target_dim)
         loss = criterion(scores, targets.view(-1))
@@ -94,12 +95,13 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
             optimizer.zero_grad()
             loss.backward()
             # Clip gradient
+            torch.nn.utils.clip_grad_norm(model.parameters(), max_norm)
             # Update
             optimizer.step()
 
         if args.cuda:
             pass
-            #print("pass now")
+            # print("pass now")
             # torch.cuda.synchronize() # multi-gpu
 
         _, predict = torch.max(scores, 1)
@@ -108,10 +110,11 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
         total_loss += loss.data[0]
         total_frame += batch_size * steps
 
-        if i % 100 == 1:
+        if i % 1000 == 1:
             print('Epoch {0} | Iter {1} | Average Loss {2:.3f} | '
                   'Frame Acc {3:.3f}'.format(epoch + 1, i, total_loss / i,
-                                           total_correct / total_frame * 100.0))
+                                          total_correct / total_frame * 100.0),
+                                          flush=True)
         
         # Do I really need this?
         del loss
@@ -201,7 +204,8 @@ def main(args):
                           feat_dim=feat_dim, target_dim=target_dim,
                           model=model, criterion=criterion, cross_valid=True,
                           batch_size=args.batch_size, steps=args.bptt_steps,
-                          epoch=epoch, optimizer=optimizer)
+                          epoch=epoch, max_norm=args.max_norm,
+                          optimizer=optimizer)
         print('-'*80)
         print('Validation Summary | End of Epoch {0} | Time {1:.2f}s | '
               'Validation Loss {2:.3f} | Validation Acc {3:.3f} '.format(

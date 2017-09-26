@@ -39,8 +39,8 @@ class LSTMModel(nn.Module):
         h = Variable(self.hidden[0].data)
         c = Variable(self.hidden[1].data)
         self.hidden = (h, c)
-        for b in range(len(reset_flags)):
-            if reset_flags[b] == 1:
+        for b, flag in enumerate(reset_flags):
+            if flag == 1:
                 self.hidden[0][:, b, :].data.fill_(0)
                 self.hidden[1][:, b, :].data.fill_(0)
 

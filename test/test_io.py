@@ -11,7 +11,7 @@ def main(feat_rspecifier, ali_rspecifier):
         while not feature_reader.done():
             i += 1
             feat = feature_reader.next()
-            print(i, feat[0], feat[1].shape, ali[feat[0]].shape)
+            print(i, feat[0], feat[1].shape, ali[feat[0]].shape, flush=True)
 
         # for i, feat in enumerate(feature_reader):
         #     print(i, feat[0], feat[1].shape, ali[feat[0]].shape)
