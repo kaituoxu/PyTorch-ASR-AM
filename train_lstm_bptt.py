@@ -47,7 +47,7 @@ parser.add_argument('--model_path', default='final.pth.tar',
 
 def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
                   cross_valid, model, criterion, batch_size, steps, epoch,
-                  max_norm, optimizer=None):
+                  max_norm=None, optimizer=None):
     """
     Simulate Kaldi nnet-train-multistream.cc
     Args:
@@ -71,7 +71,7 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
         i += 1
         feat_host, target_host, new_utt_flags, done = \
             get_one_batch_data(feat_reader, target_reader, feats_utt,
-                               targets_utt, new_utt_flags, feat_dim, 
+                               targets_utt, new_utt_flags, feat_dim,
                                batch_size, steps)
         if done:
             break
@@ -132,7 +132,7 @@ def main(args):
         else:
             raise
 
-    # IO 
+    # IO
     train_feats_rspecifier = args.train_feats
     train_targets_rspecifier = args.train_targets
     val_feats_rspecifier = args.val_feats
@@ -169,11 +169,11 @@ def main(args):
     prev_val_loss = float("inf")
     best_val_loss = float("inf")
 
-    # train model multi-epochs
+    # Train model multi-epochs
     for epoch in range(start_epoch, args.epochs):
         # Train one epoch
         print('Training...')
-        model.train() # Turn on BatchNorm & Dropout
+        model.train()  # Turn on BatchNorm & Dropout
         start = time.time()
         avg_loss, avg_acc =  \
             run_one_epoch(feats_rspecifier=train_feats_rspecifier,
@@ -181,8 +181,9 @@ def main(args):
                           feat_dim=feat_dim, target_dim=target_dim,
                           model=model, criterion=criterion, cross_valid=False,
                           batch_size=args.batch_size, steps=args.bptt_steps,
-                          epoch=epoch, optimizer=optimizer)
-                          
+                          epoch=epoch, max_norm=args.max_norm,
+                          optimizer=optimizer)
+
         print('-'*80)
         print('Training Summary | End of Epoch {0} | Time {1:.2f}s | '
               'Train Loss {2:.3f} | Train Acc {3:.3f} '.format(
@@ -191,12 +192,13 @@ def main(args):
 
         if args.checkpoint:
             file_path = '%s/am_%d.pth.tar' % (save_folder, epoch + 1)
-            torch.save(LSTMModel.serialize(model, optimizer,epoch+1), file_path)
+            torch.save(LSTMModel.serialize(model, optimizer, epoch + 1),
+                       file_path)
             print('Saving checkpoint model to %s' % file_path)
 
         # Cross validation
         print('Cross validation...')
-        model.eval() # Turn off Batchnorm & Dropout
+        model.eval()  # Turn off Batchnorm & Dropout
         start = time.time()
         val_loss, val_acc =  \
             run_one_epoch(feats_rspecifier=val_feats_rspecifier,
@@ -204,8 +206,7 @@ def main(args):
                           feat_dim=feat_dim, target_dim=target_dim,
                           model=model, criterion=criterion, cross_valid=True,
                           batch_size=args.batch_size, steps=args.bptt_steps,
-                          epoch=epoch, max_norm=args.max_norm,
-                          optimizer=optimizer)
+                          epoch=epoch, optimizer=optimizer)
         print('-'*80)
         print('Validation Summary | End of Epoch {0} | Time {1:.2f}s | '
               'Validation Loss {2:.3f} | Validation Acc {3:.3f} '.format(
@@ -226,7 +227,8 @@ def main(args):
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             file_path = os.path.join(save_folder, args.model_path)
-            torch.save(LSTMModel.serialize(model, optimizer,epoch+1), file_path)
+            torch.save(LSTMModel.serialize(model, optimizer, epoch + 1),
+                       file_path)
             print("Find better validated model, saving to %s" % file_path)
 
 
