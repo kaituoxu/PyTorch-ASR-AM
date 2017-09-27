@@ -37,8 +37,8 @@ parser.add_argument('--epochs', default=2, type=int, help='Number of training ep
 parser.add_argument('--cuda', dest='cuda', action='store_true', help='Use cuda to train model')
 parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
+parser.add_argument('--L2', default=0, type=float, help='L2 regularization')
 parser.add_argument('--max_norm', default=250, type=int, help='Norm cutoff to prevent explosion of gradients')
-parser.add_argument('--learning_anneal', default=1.1, type=float, help='Annealing applied to learning rate every epoch')
 parser.add_argument('--checkpoint', dest='checkpoint', action='store_true', help='Enables checkpoint saving of model')
 parser.add_argument('--continue_from', default='', help='Continue from checkpoint model')
 parser.add_argument('--model_path', default='final.pth.tar',
@@ -149,7 +149,8 @@ def main(args):
                       )
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
-                                momentum=args.momentum)
+                                momentum=args.momentum,
+                                weight_decay=args.L2)
     print(model)
     print("Number of parameters: %d" % get_param_size(model))
 

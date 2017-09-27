@@ -3,5 +3,6 @@ data
 __pycache__
 *.so
 *.a
-models*
+model*
 temp
+zhoupan*
