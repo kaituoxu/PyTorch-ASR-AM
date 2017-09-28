@@ -6,13 +6,13 @@ import sys
 import time
 
 import numpy as np
-
-import kaldi_io
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
+
+import kaldi_io
 from data import *
 from lstm import LSTMModel
-from torch.autograd import Variable
 from utils import *
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -22,32 +22,49 @@ np.set_printoptions(threshold=np.nan, precision=2, linewidth=275)
 DEBUG = 1
 
 parser = argparse.ArgumentParser(description="ASR AM training")
-parser.add_argument('--train_feats', default='', help='Train feat kaldi respecifier')
-parser.add_argument('--train_targets', default='', help='Train target kaldi respecifier')
-parser.add_argument('--val_feats', default='', help='Valid feat kaldi respecifier')
-parser.add_argument('--val_targets', default='', help='Valid target kaldi respecifier')
-parser.add_argument('--feat_dim', type=int, help='Input feature dimension')
-parser.add_argument('--target_dim', type=int, help='Output target dimension')
-parser.add_argument('--save_folder', default='models/', help='Location to save epoch models')
-parser.add_argument('--hidden_size', default=512, type=int, help='Hidden size of RNNs')
-parser.add_argument('--hidden_layers', default=3, type=int, help='Number of RNN layers')
-parser.add_argument('--bptt_steps', default=20, type=int, help='Sequence length of truncated BPTT')
-parser.add_argument('--batch_size', default=10, type=int, help='Batch size for training')
-parser.add_argument('--epochs', default=2, type=int, help='Number of training epochs')
-parser.add_argument('--cuda', dest='cuda', action='store_true', help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float, help='initial learning rate')
+parser.add_argument('--train_feats', default='',
+                    help='Train feat kaldi respecifier')
+parser.add_argument('--train_targets', default='',
+                    help='Train target kaldi respecifier')
+parser.add_argument('--val_feats', default='',
+                    help='Valid feat kaldi respecifier')
+parser.add_argument('--val_targets', default='',
+                    help='Valid target kaldi respecifier')
+parser.add_argument('--feat_dim', type=int,
+                    help='Input feature dimension')
+parser.add_argument('--target_dim', type=int,
+                    help='Output target dimension')
+parser.add_argument('--save_folder', default='models/',
+                    help='Location to save epoch models')
+parser.add_argument('--hidden_size', default=512, type=int,
+                    help='Hidden size of RNNs')
+parser.add_argument('--hidden_layers', default=3, type=int,
+                    help='Number of RNN layers')
+parser.add_argument('--bptt_steps', default=20, type=int,
+                    help='Sequence length of truncated BPTT')
+parser.add_argument('--batch_size', default=10, type=int,
+                    help='Batch size for training')
+parser.add_argument('--epochs', default=2, type=int,
+                    help='Number of training epochs')
+parser.add_argument('--cuda', dest='cuda', action='store_true',
+                    help='Use cuda to train model')
+parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float,
+                    help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--L2', default=0, type=float, help='L2 regularization')
-parser.add_argument('--max_norm', default=250, type=int, help='Norm cutoff to prevent explosion of gradients')
-parser.add_argument('--checkpoint', dest='checkpoint', action='store_true', help='Enables checkpoint saving of model')
-parser.add_argument('--continue_from', default='', help='Continue from checkpoint model')
+parser.add_argument('--max_norm', default=250, type=int,
+                    help='Norm cutoff to prevent explosion of gradients')
+parser.add_argument('--checkpoint', dest='checkpoint', action='store_true',
+                    help='Enables checkpoint saving of model')
+parser.add_argument('--continue_from', default='',
+                    help='Continue from checkpoint model')
 parser.add_argument('--model_path', default='final.pth.tar',
                     help='Location to save best validation model')
 
 
 def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
                   cross_valid, model, criterion, batch_size, steps, epoch,
-                  max_norm=None, optimizer=None):
+                  max_norm=None, optimizer=None, cuda=False):
     """
     Simulate Kaldi nnet-train-multistream.cc
     Args:
@@ -60,15 +77,14 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
     feats_utt = [np.array([])] * batch_size  # every element is numpy ndarray
     targets_utt = [np.array([])] * batch_size
     new_utt_flags = [0] * batch_size
+    hidden = model.module.init_hidden(batch_size, cuda)
 
+    i = 0
     total_correct = 0
     total_loss = 0
     total_frame = 0
 
-    i = 0
-    model.hidden = model.init_hidden()  # to use GPU, must do this
     while True:
-        i += 1
         feat_host, target_host, new_utt_flags, done = \
             get_one_batch_data(feat_reader, target_reader, feats_utt,
                                targets_utt, new_utt_flags, feat_dim,
@@ -84,9 +100,12 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
 
         feats = Variable(feat_tensor, requires_grad=False)
         targets = Variable(target_tensor, requires_grad=False)
+        # use view((1, -1)) because we use dim=1 in nn.DataParallel()
+        new_utt_flags = Variable(torch.ByteTensor(new_utt_flags).view((1, -1)),
+                                 requires_grad=False)
 
         # Forward
-        scores = model(feats, new_utt_flags)  # TxNxC
+        scores, hidden = model(feats, hidden, new_utt_flags)  # TxNxC
         # Loss
         scores = scores.view(-1, target_dim)
         loss = criterion(scores, targets.view(-1))
@@ -99,13 +118,14 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
             # Update
             optimizer.step()
 
-        if args.cuda:
+        if cuda:
             pass
             # print("pass now")
             # torch.cuda.synchronize() # multi-gpu
 
         _, predict = torch.max(scores, 1)
 
+        i += 1
         total_correct += (predict == targets.view(-1)).sum().data[0]
         total_loss += loss.data[0]
         total_frame += batch_size * steps
@@ -145,7 +165,6 @@ def main(args):
                       ntarget=target_dim,
                       nhidden=args.hidden_size,
                       nlayer=args.hidden_layers,
-                      batch_size=args.batch_size
                       )
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
@@ -154,11 +173,12 @@ def main(args):
     print(model)
     print("Number of parameters: %d" % get_param_size(model))
 
+    # GPU & Multi-GPU
     if args.cuda:
-        model.cuda()
-        # Multi-GPU
-        # model = torch.nn.DataParallel(model).cuda()
+        # model.cuda()
+        model = nn.DataParallel(model, dim=1).cuda()
 
+    # Restore model information from specified model file
     if args.continue_from:
         print('Loading checkpoint model %s' % args.continue_from)
         package = torch.load(args.continue_from)
@@ -183,7 +203,7 @@ def main(args):
                           model=model, criterion=criterion, cross_valid=False,
                           batch_size=args.batch_size, steps=args.bptt_steps,
                           epoch=epoch, max_norm=args.max_norm,
-                          optimizer=optimizer)
+                          optimizer=optimizer, cuda=args.cuda)
 
         print('-'*80)
         print('Training Summary | End of Epoch {0} | Time {1:.2f}s | '
@@ -191,6 +211,7 @@ def main(args):
               epoch + 1, time.time() - start, avg_loss, avg_acc))
         print('-'*80)
 
+        # Save model at each epoch
         if args.checkpoint:
             file_path = '%s/am_%d.pth.tar' % (save_folder, epoch + 1)
             torch.save(LSTMModel.serialize(model, optimizer, epoch + 1),
@@ -207,14 +228,14 @@ def main(args):
                           feat_dim=feat_dim, target_dim=target_dim,
                           model=model, criterion=criterion, cross_valid=True,
                           batch_size=args.batch_size, steps=args.bptt_steps,
-                          epoch=epoch, optimizer=optimizer)
+                          epoch=epoch, optimizer=optimizer, cuda=args.cuda)
         print('-'*80)
         print('Validation Summary | End of Epoch {0} | Time {1:.2f}s | '
               'Validation Loss {2:.3f} | Validation Acc {3:.3f} '.format(
               epoch + 1, time.time() - start, val_loss, val_acc))
         print('-'*80)
 
-        # Adjust learning rate
+        # Adjust learning rate, halving
         if val_loss >= prev_val_loss:
             optim_state = optimizer.state_dict()
             optim_state['param_groups'][0]['lr'] = \
