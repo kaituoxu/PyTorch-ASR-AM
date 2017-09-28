@@ -104,8 +104,10 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
         new_utt_flags = Variable(torch.ByteTensor(new_utt_flags).view((1, -1)),
                                  requires_grad=False)
 
+        # Reset hidden states
+        hidden = model.reset_hidden(hidden, new_utt_flags[0])
         # Forward
-        scores, hidden = model(feats, hidden, new_utt_flags)  # TxNxC
+        scores, hidden = model(feats, hidden)  # TxNxC
         # Loss
         scores = scores.view(-1, target_dim)
         loss = criterion(scores, targets.view(-1))

@@ -18,6 +18,15 @@ def read_one_utt(feat_reader, target_reader):
 
 def get_one_batch_data(feat_reader, target_reader, feats_utt, targets_utt,
                        new_utt_flags, feat_dim, batch_size, steps):
+    """
+    Get one mini-batch data as model input and target, including reset flags.
+
+    Returns a tuple of:
+    - feat_host:     np.ndarray, TxNxD
+    - target_host:   np.ndarray, TxNxD
+    - new_utt_flags: list, N
+    - done:          boolen, done or not.
+    """
     #### START prepare mini-batch data ####
     new_utt_flags = [0] * batch_size
     for b in range(batch_size):

@@ -3,8 +3,14 @@
 - [ ] Train GRU.
 
 ### Usage
+#### Train
 ```bash
 CUDA_VISIBLE_DEVICES=7 time nohup python train_lstm_bptt.py --train_feats="scp:data/tr_feats_shuf.scp" --train_targets="ark,t:data/tr_ali.txt" --feat_dim=40 --target_dim=3019 --val_feats="scp:data/val_feats.scp" --val_targets="ark,t:data/val_ali.txt" --cuda --checkpoint --epochs=10 > train.log &
+```
+#### Inference
+- [ ] TODO: Fix problem with `nn.DataParallel()`
+```bash
+python lstm_forward.py --model_path=exp/models-lr.1-clip250-shuf/final.pth.tar --in_feat="scp:data/val_feats_shuf.scp"--out_feat="ark,t:data/val_out.ark" --feat_dim=40 --target_dim=3019 --apply_logsoftmax
 ```
 
 ### Note:
