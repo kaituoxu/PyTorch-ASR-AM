@@ -25,7 +25,7 @@ class LSTMModel(nn.Module):
         # init weights
         self.init_weights(init_range=0.1)
 
-    def forward(self, input, hidden):
+    def forward(self, input, hidden, reset_flags=None, train=False):
         """
         To use nn.DataParallel, all inputs must be torch Variable. N batch will
         be split to multi-GPU. e.g.: using 2 GPU, originate N=16 will be 8 in
@@ -34,11 +34,16 @@ class LSTMModel(nn.Module):
         Inputs:
         - input: Variable, shape = (T, N, D)
         - hidden: Variable, shape = (L, N, H)
+        - reset_flags: Variable, shape = (1, N)
+        - train: binary, whether is training or not
 
         Returns a tuple of:
         - score: Variable, shape = (T, N, C)
         - hidden: Variable, shape = (L, N, H)
         """
+        if train:
+            # Reset hidden states
+            hidden = self.reset_hidden(hidden, reset_flags[0])
         out, hidden = self.lstm(input, hidden)
         score = self.fc(out.view(out.size(0) * out.size(1), out.size(2)))
         return score.view(out.size(0), out.size(1), score.size(1)), hidden

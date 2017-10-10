@@ -39,6 +39,7 @@ def main(args):
     if args.cuda:
         model = nn.DataParallel(model, dim=1)  # add .cuda() later
     model.load_state_dict(torch.load(args.model_path)['state_dict'])
+    model.eval()  # Turn off Batchnorm & Dropout
 
     # IO
     feat_rspecifier = args.in_feat
