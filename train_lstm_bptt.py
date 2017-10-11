@@ -36,10 +36,14 @@ parser.add_argument('--target_dim', type=int,
                     help='Output target dimension')
 parser.add_argument('--save_folder', default='models/',
                     help='Location to save epoch models')
+parser.add_argument('--rnn_type', default='lstm',
+                    help='Type of the RNN. gru|lstm are supported')
 parser.add_argument('--hidden_size', default=512, type=int,
                     help='Hidden size of RNNs')
 parser.add_argument('--hidden_layers', default=3, type=int,
                     help='Number of RNN layers')
+parser.add_argument('--optimizer', default='sgd',
+                    help='Type of the optimizer. sgd | adam are supported')
 parser.add_argument('--bptt_steps', default=20, type=int,
                     help='Sequence length of truncated BPTT')
 parser.add_argument('--batch_size', default=10, type=int,
@@ -48,7 +52,7 @@ parser.add_argument('--epochs', default=2, type=int,
                     help='Number of training epochs')
 parser.add_argument('--cuda', dest='cuda', action='store_true',
                     help='Use cuda to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-4, type=float,
+parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
                     help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, help='momentum')
 parser.add_argument('--L2', default=0, type=float, help='L2 regularization')
@@ -165,11 +169,16 @@ def main(args):
                       ntarget=target_dim,
                       nhidden=args.hidden_size,
                       nlayer=args.hidden_layers,
+                      rnn_type=args.rnn_type
                       )
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
-                                momentum=args.momentum,
-                                weight_decay=args.L2)
+    if args.optimizer == 'sgd':
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr,
+                                    momentum=args.momentum,
+                                    weight_decay=args.L2)
+    elif args.optimizer == 'adam':
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr,
+                                     weight_decay=args.L2)
     print(model)
     print("Number of parameters: %d" % get_param_size(model))
 

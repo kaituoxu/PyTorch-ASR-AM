@@ -2,10 +2,15 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+supported_rnns = {
+    'lstm': nn.LSTM,
+    'gru': nn.GRU
+}
+
 
 class LSTMModel(nn.Module):
 
-    def __init__(self, ninput, ntarget, nhidden, nlayer):
+    def __init__(self, ninput, ntarget, nhidden, nlayer, rnn_type='lstm'):
         """
         Config the model.
 
@@ -19,8 +24,10 @@ class LSTMModel(nn.Module):
         # model hyper-parameters
         self.nhidden = nhidden
         self.nlayer = nlayer
+        self.rnn_type = rnn_type
         # model component
-        self.lstm = nn.LSTM(ninput, nhidden, nlayer)
+        # e.g.: self.rnn = nn.LSTM(ninput, nhidden, nlayer)
+        self.rnn = supported_rnns[rnn_type](ninput, nhidden, nlayer)
         self.fc = nn.Linear(nhidden, ntarget)
         # init weights
         self.init_weights(init_range=0.1)
@@ -44,7 +51,7 @@ class LSTMModel(nn.Module):
         if train:
             # Reset hidden states
             hidden = self.reset_hidden(hidden, reset_flags[0])
-        out, hidden = self.lstm(input, hidden)
+        out, hidden = self.rnn(input, hidden)
         score = self.fc(out.view(out.size(0) * out.size(1), out.size(2)))
         return score.view(out.size(0), out.size(1), score.size(1)), hidden
 
@@ -61,7 +68,13 @@ class LSTMModel(nn.Module):
             c0_tensor = c0_tensor.cuda()
         h0 = Variable(h0_tensor)
         c0 = Variable(c0_tensor)
-        return (h0, c0)
+        if self.rnn_type == 'lstm':
+            return (h0, c0)
+        elif self.rnn_type == 'gru':
+            return h0
+        else:
+            print("Not support this type yet.")
+            exit(0)
 
     def reset_hidden(self, hidden, reset_flags):
         """
@@ -72,13 +85,22 @@ class LSTMModel(nn.Module):
         - reset_flags: Variable, shape = (N, )
         """
         # detach it from history (pytorch mechanics)
-        h = Variable(hidden[0].data)
-        c = Variable(hidden[1].data)
-        hidden = (h, c)
-        for b, flag in enumerate(reset_flags):
-            if flag.data[0] == 1:  # data[0] access the data in Variable
-                hidden[0][:, b, :].data.fill_(0)
-                hidden[1][:, b, :].data.fill_(0)
+        if self.rnn_type == 'lstm':
+            h = Variable(hidden[0].data)
+            c = Variable(hidden[1].data)
+            hidden = (h, c)
+            for b, flag in enumerate(reset_flags):
+                if flag.data[0] == 1:  # data[0] access the data in Variable
+                    hidden[0][:, b, :].data.fill_(0)
+                    hidden[1][:, b, :].data.fill_(0)
+        elif self.rnn_type == 'gru':
+            hidden = Variable(hidden.data)
+            for b, flag in enumerate(reset_flags):
+                if flag.data[0] == 1:  # data[0] access the data in Variable
+                    hidden[:, b, :].data.fill_(0)
+        else:
+            print("Not support this type yet.")
+            exit(0)
         return hidden
 
     def init_weights(self, init_range=0.1):
