@@ -2,9 +2,12 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 
+from model import lstm
+
 supported_rnns = {
     'lstm': nn.LSTM,
-    'gru': nn.GRU
+    'gru': nn.GRU,
+    'mylstm': lstm.LSTM
 }
 
 
@@ -68,7 +71,7 @@ class LSTMModel(nn.Module):
             c0_tensor = c0_tensor.cuda()
         h0 = Variable(h0_tensor)
         c0 = Variable(c0_tensor)
-        if self.rnn_type == 'lstm':
+        if self.rnn_type in ['lstm', 'mylstm']:
             return (h0, c0)
         elif self.rnn_type == 'gru':
             return h0
@@ -85,7 +88,7 @@ class LSTMModel(nn.Module):
         - reset_flags: Variable, shape = (N, )
         """
         # detach it from history (pytorch mechanics)
-        if self.rnn_type == 'lstm':
+        if self.rnn_type in ['lstm', 'mylstm']:
             h = Variable(hidden[0].data)
             c = Variable(hidden[1].data)
             hidden = (h, c)
