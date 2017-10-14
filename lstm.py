@@ -13,7 +13,8 @@ supported_rnns = {
 
 class LSTMModel(nn.Module):
 
-    def __init__(self, ninput, ntarget, nhidden, nlayer, rnn_type='lstm'):
+    def __init__(self, ninput, ntarget, nhidden, nlayer, rnn_type='lstm',
+                 use_peepholes=False, proj_size=None):
         """
         Config the model.
 

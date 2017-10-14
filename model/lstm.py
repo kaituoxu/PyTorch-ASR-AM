@@ -5,11 +5,12 @@ from torch.autograd import Variable
 
 
 class LSTM(nn.Module):
-    """
-    Multi-layer LSTM.
+    """Multi-layer LSTM.
+    Support optional peephole connection and projection connection.
     """
 
-    def __init__(self, input_size, hidden_size, num_layers=1):
+    def __init__(self, input_size, hidden_size, num_layers=1,
+                 use_peepholes=False, proj_size=None):
         """
         Inputs:
         - input_size: D
@@ -22,11 +23,17 @@ class LSTM(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+        self.use_peepholes = use_peepholes
+        self.proj_size = proj_size
         # model parameters
         self.cell_lst = nn.ModuleList()
         for layer in range(num_layers):
             layer_input_size = input_size if layer == 0 else hidden_size
-            self.cell_lst.append(LSTMCell(layer_input_size, hidden_size))
+            self.cell_lst.append(ProjLSTMCell(layer_input_size,
+                                              hidden_size,
+                                              use_peepholes=use_peepholes,
+                                              proj_size=proj_size))
+            # self.cell_lst.append(LSTMCell(layer_input_size, hidden_size))
 
     def forward(self, input, prev):
         """
@@ -54,6 +61,9 @@ class LSTM(nn.Module):
 
 
 class LSTMCell(nn.Module):
+    """Basic LSTM Cell.
+    The implementation is based on: https://arxiv.org/pdf/1409.2329.pdf
+    """
 
     def __init__(self, input_size, hidden_size, bias=True):
         super(LSTMCell, self).__init__()
@@ -96,4 +106,81 @@ class LSTMCell(nn.Module):
         o = torch.sigmoid(ao)
         next_c = f * prev_c + i * g
         next_h = o * torch.tanh(next_c)
+        return next_h, next_c
+
+
+class ProjLSTMCell(nn.Module):
+    """LSTM cell with peephole connection and projection connection.
+
+    This implmentation is based on: 
+        https://research.google.com/pubs/archive/43905.pdf
+
+    Hasim Sak, Andrew Senior, and Francoise Beaufays.
+    "Long short-term memory recurrent neural network architectures for
+     large scale acoustic modeling." INTERSPEECH, 2014.
+
+    The class uses optional peep-hole connections, optional cell clipping, and
+    an optional projection layer.
+    """
+
+    def __init__(self, input_size, hidden_size, use_peepholes=False,
+                 proj_size=None, bias=True):
+        super(ProjLSTMCell, self).__init__()
+        # remember hyperparameters
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.use_peepholes = use_peepholes
+        self.proj_size = proj_size
+        self.bias = bias
+        # model parameters
+        self.weight_ih = nn.Parameter(torch.Tensor(input_size,
+                                                   4 * hidden_size))
+        self.weight_hh = nn.Parameter(torch.Tensor(hidden_size,
+                                                   4 * hidden_size))
+        if use_peepholes:
+            self.weight_ic_diag = nn.Parameter(torch.Tensor(hidden_size))
+            self.weight_fc_diag = nn.Parameter(torch.Tensor(hidden_size))
+            self.weight_oc_diag = nn.Parameter(torch.Tensor(hidden_size))
+        if proj_size is not None:
+            self.weight_hm = nn.Parameter(torch.Tensor(hidden_size,
+                                                       proj_size))
+        if bias:
+            self.bias_ih = nn.Parameter(torch.Tensor(4 * hidden_size))
+            self.bias_hh = nn.Parameter(torch.Tensor(4 * hidden_size))
+        else:
+            self.register_parameter('bias_ih', None)
+            self.register_parameter('bias_hh', None)
+        self.init_parameters()
+
+    def init_parameters(self):
+        stdv = 1.0 / np.sqrt(self.hidden_size)
+        for weight in self.parameters():
+            weight.data.uniform_(-stdv, stdv)
+
+    def forward(self, input, prev):
+        """
+        Inputs:
+        - input: (N, D)
+        - prev: (prev_h, prev_c), each is (N, H)
+        """
+        prev_h, prev_c = prev
+        affine = input.mm(self.weight_ih) + prev_h.mm(self.weight_hh)  # N x 4H
+        if self.bias:
+            affine += self.bias_ih + self.bias_hh
+        ai, af, ag, ao = torch.split(affine, self.hidden_size, dim=1)
+        if self.use_peepholes:
+            i = torch.sigmoid(ai + prev_c * self.weight_ic_diag)
+            f = torch.sigmoid(af + prev_c * self.weight_fc_diag)
+            g = torch.tanh(ag)
+            next_c = f * prev_c + i * g
+            o = torch.sigmoid(ao + next_c * self.weight_oc_diag)
+        else:
+            i = torch.sigmoid(ai)
+            f = torch.sigmoid(af)
+            g = torch.tanh(ag)
+            next_c = f * prev_c + i * g
+            o = torch.sigmoid(ao)
+        next_h = o * torch.tanh(next_c)
+        if self.proj_size is not None:
+            next_h = next_h.mm(self.weight_hm)
         return next_h, next_c

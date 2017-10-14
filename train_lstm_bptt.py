@@ -42,6 +42,8 @@ parser.add_argument('--hidden_size', default=512, type=int,
                     help='Hidden size of RNNs')
 parser.add_argument('--hidden_layers', default=3, type=int,
                     help='Number of RNN layers')
+parser.add_argument('--use_peepholes', dest='use_peepholes', action='store_true',
+                    help='Use peepholes lstm')
 parser.add_argument('--optimizer', default='sgd',
                     help='Type of the optimizer. sgd | adam are supported')
 parser.add_argument('--bptt_steps', default=20, type=int,
