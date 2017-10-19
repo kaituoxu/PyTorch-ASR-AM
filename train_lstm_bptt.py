@@ -100,7 +100,7 @@ def run_one_epoch(feats_rspecifier, targets_rspecifier, feat_dim, target_dim,
 
         feat_tensor = torch.FloatTensor(feat_host)
         target_tensor = torch.LongTensor(target_host.astype(np.int64))
-        if args.cuda:
+        if cuda:
             feat_tensor = feat_tensor.cuda()
             target_tensor = target_tensor.cuda()
 
